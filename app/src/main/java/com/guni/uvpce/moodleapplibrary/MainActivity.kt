@@ -7,7 +7,6 @@ import android.text.method.ScrollingMovementMethod
 import android.util.Base64
 import android.util.Log
 import android.widget.Button
-import android.widget.ImageView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.guni.uvpce.moodleapplibrary.model.*
@@ -183,7 +182,7 @@ class MainActivity : AppCompatActivity() {
                     tv1.text= res[0].url
                     ModelRepository.setMoodleUrlSetting(this@MainActivity,res[0])
                     modelRepo= ModelRepository.getModelRepo(this@MainActivity)
-                    val res1 = modelRepo!!.isStudentRegisterForFace(this@MainActivity,"20012011047")
+                    val res1 = modelRepo!!.isStudentRegisterForFace("20012011047")
 //                    tv1.text = modelRepo!!.convertUrlToBase64()
                     tv1.text=res1.hasUserUploadImg.toString()
                     mProgressDialog.dismiss()

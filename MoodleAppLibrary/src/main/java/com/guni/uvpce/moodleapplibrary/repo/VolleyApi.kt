@@ -31,11 +31,11 @@ class VolleyApi(val context: Context) {
                     }catch (e:Exception){
                         Log.e("VolleyApi", "volleyConnection: $e", e)
                         content.resumeWithException(e)
-//                        throw Exception("volleyConnection: $e")
+                        throw Exception("volleyConnection: $e")
                     }
                 },onError={error->
                     content.resumeWithException(java.lang.Exception(error))
-//                    throw Exception("volleyConnection: $error")
+                    throw Exception("volleyConnection: $error")
                 })
         }
     }

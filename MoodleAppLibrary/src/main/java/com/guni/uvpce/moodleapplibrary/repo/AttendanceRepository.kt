@@ -10,17 +10,13 @@ import android.util.Log
 import com.guni.uvpce.moodleapplibrary.model.MoodleBasicUrl
 import com.guni.uvpce.moodleapplibrary.model.MoodleUrl
 import com.guni.uvpce.moodleapplibrary.model.UserStatusBulk
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.*
+import java.io.ByteArrayOutputStream
 import java.net.URL
 
-/**
- * You can access all Moodle-related functions by using the AttendanceRepository class.
- * @param MoodleURL String
- * @param MoodleBasicConfig
- * @return Object
- */
 class AttendanceRepository(
     context: Context,
     moodleBasicConfig: MoodleBasicUrl
@@ -29,12 +25,12 @@ class AttendanceRepository(
         val moodleUrlList = ArrayList<MoodleUrl>()
     }
 
-    val volleyApi = VolleyApi(context)
-    val moodleConfig:MoodleUrl = MoodleUrl.getMoodleUrl(moodleBasicConfig.id, moodleUrlList)
+    private val volleyApi = VolleyApi(context)
+    private val moodleConfig:MoodleUrl = MoodleUrl.getMoodleUrl(moodleBasicConfig.id, moodleUrlList)
     private val MoodleURL = moodleConfig.url
-    val CORE_TOKEN = moodleConfig.core_token
-    val ATTENDANCE_TOKEN = moodleConfig.att_token
-    val UPLOAD_FILE_TOKEN = moodleConfig.file_token
+    private val CORE_TOKEN = moodleConfig.core_token
+    private val ATTENDANCE_TOKEN = moodleConfig.att_token
+    private val UPLOAD_FILE_TOKEN = moodleConfig.file_token
     private val TAG = "AttendanceRepository"
     fun getMoodleServerUrl():String {return "$MoodleURL/webservice/rest/server.php" }
     private fun getTokenUrl():String
@@ -79,7 +75,14 @@ class AttendanceRepository(
         params["moodlewsrestformat"] = "json"
         params["field"] = "username"
         params["values[]"] = username
-        return (JSONArray(volleyApi.volleyConnection(getMoodleServerUrl(), params)))
+        try{
+            return (JSONArray(volleyApi.volleyConnection(getMoodleServerUrl(), params)))
+        }
+        catch (ex:Exception)
+        {
+            throw Exception(ex.message)
+        }
+
     }
 
     override suspend fun getUserByFieldMoodle(field: String, value: ArrayList<String>):JSONArray {
@@ -91,7 +94,14 @@ class AttendanceRepository(
         for (i in 0 until value.size){
             params["values[$i]"] = value[i]
         }
-        return JSONArray(volleyApi.volleyConnection(getMoodleServerUrl(),params))
+        try{
+            return JSONArray(volleyApi.volleyConnection(getMoodleServerUrl(),params))
+        }
+        catch (ex:Exception)
+        {
+            throw Exception(ex.message)
+        }
+
     }
 
     override suspend fun getFacultyInfoMoodle(faculty_name: String) :JSONArray{
@@ -101,64 +111,91 @@ class AttendanceRepository(
         params["moodlewsrestformat"] = "json"
         params["field"] = "username"
         params["values[]"] = faculty_name
-        return JSONArray(volleyApi.volleyConnection(getMoodleServerUrl(),params))
+
+        try{
+            return JSONArray(volleyApi.volleyConnection(getMoodleServerUrl(),params))
+        }
+        catch (ex:Exception)
+        {
+            throw Exception(ex.message)
+        }
+
     }
 
     override suspend fun getUserCoursesListMoodle(username: String):JSONArray {
-        val result = getUserInfoMoodle(username)
-        if (result.length() == 0) {
-            return JSONArray()
+        try{
+            val result = getUserInfoMoodle(username)
+            if (result.length() == 0) {
+                return JSONArray()
+            }
+            val userid = result.getJSONObject(0).getString("id")
+            val params: MutableMap<String, String> = HashMap()
+            params["wstoken"] = CORE_TOKEN
+            params["wsfunction"] = "core_enrol_get_users_courses"
+            params["moodlewsrestformat"] = "json"
+            params["userid"] = userid
+            val response = volleyApi.volleyConnection(getMoodleServerUrl(), params)
+            val newjsonArray = JSONArray()
+            val jsonarray = JSONArray(response)
+            for (i in 0 until jsonarray.length()) {
+                val jsonobject = jsonarray.getJSONObject(i)
+                val newjsonObject = JSONObject()
+                newjsonObject.put("courseid", jsonobject.getString("id"))
+                newjsonObject.put("coursename", jsonobject.getString("fullname"))
+                newjsonArray.put(newjsonObject)
+            }
+            return (newjsonArray)
         }
-        val userid = result.getJSONObject(0).getString("id")
-        val params: MutableMap<String, String> = HashMap()
-        params["wstoken"] = CORE_TOKEN
-        params["wsfunction"] = "core_enrol_get_users_courses"
-        params["moodlewsrestformat"] = "json"
-        params["userid"] = userid
-        val response = volleyApi.volleyConnection(getMoodleServerUrl(), params)
-        val newjsonArray = JSONArray()
-        val jsonarray = JSONArray(response)
-        for (i in 0 until jsonarray.length()) {
-            val jsonobject = jsonarray.getJSONObject(i)
-            val newjsonObject = JSONObject()
-            newjsonObject.put("courseid", jsonobject.getString("id"))
-            newjsonObject.put("coursename", jsonobject.getString("fullname"))
-            newjsonArray.put(newjsonObject)
+        catch (ex:java.lang.Exception)
+        {
+            throw Exception(ex.message)
         }
-        return (newjsonArray)
+
+
 
     }
 
     override suspend fun createAttendanceMoodle(course_id: String, attendance_name:String):JSONArray {
-        val params: MutableMap<String, String> = HashMap()
-        params["wstoken"] = ATTENDANCE_TOKEN
-        params["wsfunction"] = "mod_attendance_add_attendance"
-        params["moodlewsrestformat"] = "json"
-        params["courseid"] = course_id
-        params["name"] = attendance_name
-        val response = volleyApi.volleyConnection(getMoodleServerUrl(), params)
-        val attendanceIdPattern = Regex("\\d+")
-        val attendanceId = attendanceIdPattern.find(response, 0)
-        if (attendanceId != null) {
-            val arrayJSON = JSONArray()
-            val objectJSON = JSONObject()
-            objectJSON.put("id", attendanceId.value)
-            arrayJSON.put(objectJSON)
-            return (arrayJSON)
-        } else {
-            throw java.lang.Exception("Error:can't found Attendance")
+        try {
+            val params: MutableMap<String, String> = HashMap()
+            params["wstoken"] = ATTENDANCE_TOKEN
+            params["wsfunction"] = "mod_attendance_add_attendance"
+            params["moodlewsrestformat"] = "json"
+            params["courseid"] = course_id
+            params["name"] = attendance_name
+            val response = volleyApi.volleyConnection(getMoodleServerUrl(), params)
+            val attendanceIdPattern = Regex("\\d+")
+            val attendanceId = attendanceIdPattern.find(response, 0)
+            if (attendanceId != null) {
+                val arrayJSON = JSONArray()
+                val objectJSON = JSONObject()
+                objectJSON.put("id", attendanceId.value)
+                arrayJSON.put(objectJSON)
+                return (arrayJSON)
+            } else {
+                throw java.lang.Exception("Error:can't found Attendance")
+            }
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw Exception(ex.message)
         }
     }
 
     private suspend fun setDefaultAttendance(session_id:String,taken_by_id: String):JSONObject {
-        val session = getSessionMoodle(session_id)
-        val result = UserStatusBulk(session_id, taken_by_id, session, this).startExecution()
+        try {
+            val session = getSessionMoodle(session_id)
+            val result = UserStatusBulk(session_id, taken_by_id, session, this).startExecution()
 
-        if (result)
-            return (session)
-        else
-            throw Exception("Due to Slow Connectivity, Can't set Default (Absent) Attendance Status")
-
+            if (result)
+                return (session)
+            else
+                throw Exception("Due to Slow Connectivity, Can't set Default (Absent) Attendance Status")
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw Exception(ex.message)
+        }
     }
 
     override suspend fun createSessionMoodle(
@@ -172,43 +209,55 @@ class AttendanceRepository(
         params["description"] = description
         params["duration"] = duration
         params["groupid"] = group_id
-        val response = volleyApi.volleyConnection(getMoodleServerUrl(), params)
+        try {
+            val response = volleyApi.volleyConnection(getMoodleServerUrl(), params)
 
-        val sessionIdPattern = Regex("\\d+")
-        val sessionId = sessionIdPattern.find(response, 0)
-        if (sessionId != null) {
-            val arrayJSON = JSONArray()
-            val objectJSON = JSONObject()
-            objectJSON.put("id",sessionId.value)
-            arrayJSON.put(objectJSON)
-            setDefaultAttendance(session_id = sessionId.value, taken_by_id = created_by_user_id)
-            return arrayJSON
+            val sessionIdPattern = Regex("\\d+")
+            val sessionId = sessionIdPattern.find(response, 0)
+            if (sessionId != null) {
+                val arrayJSON = JSONArray()
+                val objectJSON = JSONObject()
+                objectJSON.put("id",sessionId.value)
+                arrayJSON.put(objectJSON)
+                setDefaultAttendance(session_id = sessionId.value, taken_by_id = created_by_user_id)
+                return arrayJSON
+            }
+            else{
+                throw Exception("Can't Create Session because sessionId = null found")
+            }
         }
-        else{
-            throw Exception("Can't Create Session because sessionId = null found")
+        catch (ex:java.lang.Exception)
+        {
+            throw Exception(ex.message)
         }
+
     }
 
     override suspend fun getCourseGroupsMoodle(course_id: String):JSONArray {
-
         val params: MutableMap<String, String> = HashMap()
         params["wstoken"] = CORE_TOKEN
         params["wsfunction"] = "core_group_get_course_groups"
         params["moodlewsrestformat"] = "json"
         params["courseid"] = course_id
-        val response = volleyApi.volleyConnection(getMoodleServerUrl(), params)
-        val arrayJSON = JSONArray(response)
-        val newArryJSON = JSONArray()
 
-        for (i in 0 until arrayJSON.length()) {
-            val jsonobject = arrayJSON.getJSONObject(i)
-            val objectJSON = JSONObject()
-            objectJSON.put("groupid", jsonobject.getString("id"))
-            objectJSON.put("groupname", jsonobject.getString("name"))
-            newArryJSON.put(objectJSON)
+        try {
+            val response = volleyApi.volleyConnection(getMoodleServerUrl(), params)
+            val arrayJSON = JSONArray(response)
+            val newArryJSON = JSONArray()
+
+            for (i in 0 until arrayJSON.length()) {
+                val jsonobject = arrayJSON.getJSONObject(i)
+                val objectJSON = JSONObject()
+                objectJSON.put("groupid", jsonobject.getString("id"))
+                objectJSON.put("groupname", jsonobject.getString("name"))
+                newArryJSON.put(objectJSON)
+            }
+            return newArryJSON
         }
-        return newArryJSON
-
+        catch (ex:java.lang.Exception)
+        {
+            throw Exception(ex.message)
+        }
     }
 
     override suspend fun sendMessageMoodle( userList:List<String>, qrMessage:String):JSONArray {
@@ -216,12 +265,20 @@ class AttendanceRepository(
         params["wstoken"] = CORE_TOKEN
         params["wsfunction"] = "core_message_send_instant_messages"
         params["moodlewsrestformat"] = "json"
-        for(i in 0 until userList.size){
+        for(i in userList.indices){
             params["messages[$i][touserid]"]=userList[i]
             params["messages[$i][text]"]=qrMessage
         }
-        val response = volleyApi.volleyConnection(getMoodleServerUrl(),params)
-        return JSONArray(response)
+
+        try {
+            val response = volleyApi.volleyConnection(getMoodleServerUrl(),params)
+            return JSONArray(response)
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw Exception(ex.message)
+        }
+
     }
 
     override suspend fun takeAttendanceMoodle(
@@ -242,8 +299,15 @@ class AttendanceRepository(
         params["statusid"] = status_id
         params["statusset"] = status_set
 
-        val response = volleyApi.volleyConnection(getMoodleServerUrl(),params)
-        return response == "null"
+        try {
+            val response = volleyApi.volleyConnection(getMoodleServerUrl(),params)
+            return response == "null"
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw Exception(ex.message)
+        }
+
     }
 
     override suspend fun getSessionMoodle(
@@ -256,8 +320,15 @@ class AttendanceRepository(
         params["moodlewsrestformat"] = "json"
         params["sessionid"] = session_id
 
-        val response =volleyApi.volleyConnection(getMoodleServerUrl(),params)
-        return JSONObject(response)
+        try {
+            val response =volleyApi.volleyConnection(getMoodleServerUrl(),params)
+            return JSONObject(response)
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw Exception(ex.message)
+        }
+
     }
 
     override suspend fun getSessionsListMoodle(
@@ -269,8 +340,15 @@ class AttendanceRepository(
         params["moodlewsrestformat"] = "json"
         params["attendanceid"] = attendance_id
 
-        val response = volleyApi.volleyConnection(getMoodleServerUrl(),params)
-        return JSONArray(response)
+        try {
+            val response = volleyApi.volleyConnection(getMoodleServerUrl(),params)
+            return JSONArray(response)
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw Exception(ex.message)
+        }
+
     }
 
     override suspend fun uploadFileMoodle(
@@ -296,11 +374,18 @@ class AttendanceRepository(
         params["contextlevel"] = context_level
         params["instanceid"] = instanceid
 
-        val response = volleyApi.volleyConnection(getMoodleServerUrl(),params)
-        val jsonObject = JSONObject(response)
-        val jsonArray = JSONArray()
-        jsonArray.put(jsonObject)
-        return  jsonArray
+        try {
+            val response = volleyApi.volleyConnection(getMoodleServerUrl(),params)
+            val jsonObject = JSONObject(response)
+            val jsonArray = JSONArray()
+            jsonArray.put(jsonObject)
+            return  jsonArray
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw Exception(ex.message)
+        }
+
     }
 
     override suspend fun updatePictureMoodle(
@@ -314,11 +399,18 @@ class AttendanceRepository(
         params["draftitemid"] = draft_item_id
         params["userid"] = user_id
 
-        val response = volleyApi.volleyConnection(getMoodleServerUrl(),params)
-        val jsonObject = JSONObject(response)
-        val jsonArray = JSONArray()
-        jsonArray.put(jsonObject)
-        return jsonArray
+        try {
+            val response = volleyApi.volleyConnection(getMoodleServerUrl(),params)
+            val jsonObject = JSONObject(response)
+            val jsonArray = JSONArray()
+            jsonArray.put(jsonObject)
+            return jsonArray
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw Exception(ex.message)
+        }
+
 
     }
 
@@ -335,8 +427,15 @@ class AttendanceRepository(
         params["read"] = "2"
         params["limitnum"] = "1"
 
-        val response = volleyApi.volleyConnection(getMoodleServerUrl(), params)
-        return JSONObject(response).getJSONArray("messages").getJSONObject(0)
+        try {
+            val response = volleyApi.volleyConnection(getMoodleServerUrl(), params)
+            return JSONObject(response).getJSONArray("messages").getJSONObject(0)
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw Exception(ex.message)
+        }
+
     }
 
     override suspend fun getCategoriesMoodle():JSONArray
@@ -346,7 +445,14 @@ class AttendanceRepository(
         params["wsfunction"] = "core_course_get_categories"
         params["moodlewsrestformat"] = "json"
 
-        return JSONArray(volleyApi.volleyConnection(getMoodleServerUrl(), params))
+        try {
+            return JSONArray(volleyApi.volleyConnection(getMoodleServerUrl(), params))
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw Exception(ex.message)
+        }
+
     }
 
     override suspend fun getCohortsMoodle():JSONArray {
@@ -355,7 +461,14 @@ class AttendanceRepository(
         params["wsfunction"] = "core_cohort_get_cohorts"
         params["moodlewsrestformat"] = "json"
 
-        return JSONArray(volleyApi.volleyConnection(getMoodleServerUrl(), params))
+        try {
+            return JSONArray(volleyApi.volleyConnection(getMoodleServerUrl(), params))
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw Exception(ex.message)
+        }
+
     }
 
     override suspend fun getCohortMembersMoodle(cohort_id: Int):JSONArray {
@@ -364,18 +477,21 @@ class AttendanceRepository(
         params["wsfunction"] = "core_cohort_get_cohort_members"
         params["moodlewsrestformat"] = "json"
         params["cohortids[]"] = cohort_id.toString()
+        try {
+            val response = volleyApi.volleyConnection(getMoodleServerUrl(), params)
+            val jsonArrayRes = JSONArray(response)
+            val jsonObjectRes = jsonArrayRes.getJSONObject(0)
+            val userIds = jsonObjectRes.getString("userids")
+            val pattern = Regex("\\d+")
+            val res1: Sequence<MatchResult> = pattern.findAll(userIds, 0)
+            val userList = ArrayList<String>()
+            // Prints all the matches using forEach loop
+            res1.forEach { matchResult -> userList.add(matchResult.value) }
+            return getUserByFieldMoodle("id", userList)
+        } catch (ex: java.lang.Exception) {
+            throw Exception(ex.message)
+        }
 
-        val response = volleyApi.volleyConnection(getMoodleServerUrl(), params)
-        val jsonArrayRes = JSONArray(response)
-        val jsonObjectRes = jsonArrayRes.getJSONObject(0)
-        val userIds = jsonObjectRes.getString("userids")
-        val pattern = Regex("\\d+")
-        val res1: Sequence<MatchResult> = pattern.findAll(userIds, 0)
-        val userList = ArrayList<String>()
-        // Prints all the matches using forEach loop
-        res1.forEach() { matchResult -> userList.add(matchResult.value) }
-        val res = getUserByFieldMoodle("id", userList)
-        return res
     }
 
     override suspend fun resolveImgURLMoodle(
@@ -394,7 +510,11 @@ class AttendanceRepository(
             val policy = StrictMode.ThreadPolicy.Builder().permitAll().build()
             StrictMode.setThreadPolicy(policy)
             val newUrl = URL(finalurl)
-            bitmap = BitmapFactory.decodeStream(newUrl.openConnection().getInputStream())
+            bitmap = BitmapFactory.decodeStream(withContext(Dispatchers.IO) {
+                withContext(Dispatchers.IO) {
+                    newUrl.openConnection()
+                }.getInputStream()
+            })
             val outputStream = ByteArrayOutputStream()
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
             base64 = Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
@@ -417,7 +537,14 @@ class AttendanceRepository(
         params["options[1][name]"] = "groupid"
         params["options[1][value]"] = "'username, profileimageurl, fullname'"
 
-        return JSONArray(volleyApi.volleyConnection(getMoodleServerUrl(),params))
+        try {
+            return JSONArray(volleyApi.volleyConnection(getMoodleServerUrl(),params))
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw Exception(ex.message)
+        }
+
     }
 
     override suspend fun getTeacherUserByCourseGroupMoodle(
@@ -433,7 +560,14 @@ class AttendanceRepository(
         params["options[0][name]"] = "roleid"
         params["options[0][value]"] = roleid
 
-        return JSONArray(volleyApi.volleyConnection(getMoodleServerUrl(), params))
+        try {
+            return JSONArray(volleyApi.volleyConnection(getMoodleServerUrl(), params))
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw Exception(ex.message)
+        }
+
     }
 
     override suspend fun login(recievedMoodleUsername:String,
@@ -444,8 +578,15 @@ class AttendanceRepository(
         params["password"] = recievedMoodlePassword
         params["service"] = "moodle_mobile_app"
 
-        val response = volleyApi.volleyConnection(getTokenUrl(),params)
-        Log.i(TAG, "login: ${response}")
-        return response.indexOf("token") != -1
+        try {
+            val response = volleyApi.volleyConnection(getTokenUrl(),params)
+            Log.i(TAG, "login: $response")
+            return response.indexOf("token") != -1
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw Exception(ex.message)
+        }
+
     }
 }

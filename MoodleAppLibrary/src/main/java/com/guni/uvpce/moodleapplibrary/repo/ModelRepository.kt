@@ -50,18 +50,18 @@ class ModelRepository constructor(
                 AttendanceRepository.moodleUrlList.addAll(it)
                 val moodleUrlId = getMoodleUrlId(context)
                 val data = ApiConfig(context).getAppData()
-                if(newObject) {
+                return if(newObject) {
                     val obj1 = ModelRepository(MoodleUrl.getBasicMoodleUrl(moodleUrlId, it), data)
                     obj1.attRepo = AttendanceRepository(context, obj1.moodleUrl)
                     obj1.courseAttMap = ApiConfig(context).getMapCourseJsonObj(obj1.moodleUrl.id)
-                    return obj1
+                    obj1
                 }else{
                     val obj1 = obj
                     obj.moodleUrl = MoodleUrl.getBasicMoodleUrl(moodleUrlId, it)
                     obj.appData = data
                     obj1.attRepo = AttendanceRepository(context, obj1.moodleUrl)
                     obj1.courseAttMap = ApiConfig(context).getMapCourseJsonObj(obj1.moodleUrl.id)
-                    return obj1
+                    obj1
                 }
             } else {
                 throw Exception("Not Sufficient Data for Moodle Configuration")
@@ -86,9 +86,9 @@ class ModelRepository constructor(
             val preference = PreferenceManager.getDefaultSharedPreferences(context)
             return preference.getString("MoodleUrlId","")!!
         }
-        fun setMoodleUrlSetting(context: Context,modleUrl: MoodleBasicUrl){
+        fun setMoodleUrlSetting(context: Context, moodleUrl: MoodleBasicUrl){
             val preference = PreferenceManager.getDefaultSharedPreferences(context)
-            preference.edit().putString("MoodleUrlId",modleUrl.id).apply()
+            preference.edit().putString("MoodleUrlId",moodleUrl.id).apply()
         }
     }
 
@@ -102,18 +102,26 @@ class ModelRepository constructor(
         return result
     }*/
 
-    suspend fun isStudentRegisterForFace(context: Context, enrollmentNo:String): BaseUserInfo {
-        appData.verifyData()
-        val result = getUserInfo(enrollmentNo)
-        result.userImage = getURLtoBitmap(result.imageUrl)
-        val profileImage = Utility().convertBitmapToBase64(result.userImage!!)
-        val defaultPic = convertUrlToBase64(attRepo.getDefaultUserPictureUrl())
-        val vall = StringSimilarity().similarity(profileImage.trim(), defaultPic.trim())
-        Log.i(TAG, "isStudentRegisterForFace:similarity score: $vall")
-        result.hasUserUploadImg =  vall > 0.9
-        return result
+    suspend fun isStudentRegisterForFace(enrollmentNo: String): BaseUserInfo {
+        try {
+            appData.verifyData()
+            val result = getUserInfo(enrollmentNo)
+            result.userImage = getURLtoBitmap(result.imageUrl)
+            val profileImage = Utility().convertBitmapToBase64(result.userImage!!)
+            val defaultPic = convertUrlToBase64(attRepo.getDefaultUserPictureUrl())
+            val similarvalue = StringSimilarity().similarity(profileImage.trim(), defaultPic.trim())
+            Log.i(TAG, "isStudentRegisterForFace:similarity score: $similarvalue")
+            result.hasUserUploadImg =  similarvalue > 0.9
+            return result
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
+        }
+
     }
     suspend fun getUserInfo(userName:String):BaseUserInfo{
+        try {
             appData.verifyData()
             val result = attRepo.getUserInfoMoodle(userName)
             if (result.length() == 0) {
@@ -128,11 +136,18 @@ class ModelRepository constructor(
             val image = item.get("profileimageurl").toString()
 
             return BaseUserInfo(userid,userName,firstname,lastname,fullname,emailaddr,image)
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
+        }
+
     }
     suspend fun uploadStudentPicture(context: Context,userid:String,
                                      curImageUri: Uri):JSONArray {
-        appData.verifyData()
-        //Update the selected photo in moodle
+        try {
+            appData.verifyData()
+            //Update the selected photo in moodle
             val bitmap =
                 context.let { it1 ->
                     BitmapUtils.getBitmapFromUri(
@@ -155,45 +170,65 @@ class ModelRepository constructor(
             //Updated the uploaded picture.
             val result1 = attRepo.updatePictureMoodle(draftitemid, userid)
             return (result1)
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
+        }
 
     }
     suspend fun getCourseListEnrolledByUser(userName:String):List<MoodleCourse> {
-        val result = attRepo.getUserCoursesListMoodle(userName)
-        val courseList = ArrayList<MoodleCourse>();
-        for (i in 0 until result.length()) {
-            courseList.add(
-                MoodleCourse(
-                    result.getJSONObject(i).getString("courseid"),
-                    result.getJSONObject(i).getString("coursename"),
-                    userName
+        try {
+            val result = attRepo.getUserCoursesListMoodle(userName)
+            val courseList = ArrayList<MoodleCourse>()
+            for (i in 0 until result.length()) {
+                courseList.add(
+                    MoodleCourse(
+                        result.getJSONObject(i).getString("courseid"),
+                        result.getJSONObject(i).getString("coursename"),
+                        userName
+                    )
                 )
-            )
+            }
+            return (courseList)
         }
-        return (courseList)
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
+        }
+
     }
     suspend fun getStudentList(course: MoodleCourse, group: MoodleGroup):List<MoodleUserInfo> {
 
-        val result = attRepo.getEnrolledUserByCourseGroupMoodle(course.id, group.groupid)
-        val userList = ArrayList<MoodleUserInfo>();
-        for (i in 0 until result.length()) {
-            userList.add(
-                MoodleUserInfo(
-                    course, group,
-                    result.getJSONObject(i).getString("id"),
-                    result.getJSONObject(i).getString("username"),
-                    result.getJSONObject(i).getString("firstname"),
-                    result.getJSONObject(i).getString("lastname"),
-                    result.getJSONObject(i).getString("fullname"),
-                    result.getJSONObject(i).getString("email"),
-                    result.getJSONObject(i).getString("profileimageurl")
+        try {
+            val result = attRepo.getEnrolledUserByCourseGroupMoodle(course.id, group.groupid)
+            val userList = ArrayList<MoodleUserInfo>()
+            for (i in 0 until result.length()) {
+                userList.add(
+                    MoodleUserInfo(
+                        course, group,
+                        result.getJSONObject(i).getString("id"),
+                        result.getJSONObject(i).getString("username"),
+                        result.getJSONObject(i).getString("firstname"),
+                        result.getJSONObject(i).getString("lastname"),
+                        result.getJSONObject(i).getString("fullname"),
+                        result.getJSONObject(i).getString("email"),
+                        result.getJSONObject(i).getString("profileimageurl")
+                    )
                 )
-            )
+            }
+            return (userList)
         }
-        return (userList)
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
+        }
+
     }
     suspend fun getGroupList(course: MoodleCourse):List<MoodleGroup> {
+        try {
             val result = attRepo.getCourseGroupsMoodle(course.id)
-            val groupList = ArrayList<MoodleGroup>();
+            val groupList = ArrayList<MoodleGroup>()
             for (i in 0 until result.length()) {
                 groupList.add(
                     MoodleGroup(
@@ -205,10 +240,18 @@ class ModelRepository constructor(
             }
             course.groupList.addAll(groupList)
             return (groupList)
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
+        }
+
     }
     suspend fun createSession(group: MoodleGroup,attendance: MoodleAttendance,
                       sessionStartTimeInSeconds:Long,
                       sessionDuration:Long, created_by_user_id:String, description:String):MoodleSession{
+
+        try {
             val result = attRepo.createSessionMoodle(
                 course_id = group.course.id,
                 attendance_id = attendance.attendanceId,
@@ -220,32 +263,44 @@ class ModelRepository constructor(
 
             return getSessionInfo(session_id = result.getJSONObject(0).getString("id"),
                 attendance=attendance,course=group.course,group=group)
-
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
+        }
     }
     suspend fun getFacultyListByCohort():List<BaseUserInfo>{
-        val cohort_id:Int = AttendanceRepository.moodleUrlList.filter { s->s.id == moodleUrl.id}[0].cohort_id.toInt()
-        val result = attRepo.getCohortMembersMoodle(cohort_id)
-        val list = ArrayList<BaseUserInfo> ()
-        for(i in 0 until result.length()){
-            val item = result.getJSONObject(i)
-            val userid = item.get("id").toString()
-            val firstname = item.get("firstname").toString()
-            val lastname = item.get("lastname").toString()
-            val userName = item.get("username").toString()
-            val fullname = item.get("fullname").toString()
-            val emailaddr = item.get("email").toString()
-            val image = item.get("profileimageurl").toString()
-            list.add(BaseUserInfo(userid,userName,firstname,lastname,fullname,emailaddr,image))
+        try {
+            val cohort_id:Int = AttendanceRepository.moodleUrlList.filter { s->s.id == moodleUrl.id}[0].cohort_id.toInt()
+            val result = attRepo.getCohortMembersMoodle(cohort_id)
+            val list = ArrayList<BaseUserInfo> ()
+            for(i in 0 until result.length()){
+                val item = result.getJSONObject(i)
+                val userid = item.get("id").toString()
+                val firstname = item.get("firstname").toString()
+                val lastname = item.get("lastname").toString()
+                val userName = item.get("username").toString()
+                val fullname = item.get("fullname").toString()
+                val emailaddr = item.get("email").toString()
+                val image = item.get("profileimageurl").toString()
+                list.add(BaseUserInfo(userid,userName,firstname,lastname,fullname,emailaddr,image))
+            }
+
+            return list
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
         }
 
-        return list
     }
     suspend fun getSessionList(course: MoodleCourse, attendance: MoodleAttendance, group: MoodleGroup,
                        needUserList:Boolean = false):List<MoodleSession> {
 
+        try {
             val result = attRepo.getSessionsListMoodle(attendance.attendanceId)
             Log.i("MoodleRepository", "onSuccess: " + result.toString(4))
-            val sessionList = ArrayList<MoodleSession>();
+            val sessionList = ArrayList<MoodleSession>()
             for (i in 0 until result.length()) {
                 val groupId = result.getJSONObject(i).getInt("groupid")
                 if (groupId == group.groupid.toInt()) {
@@ -298,10 +353,15 @@ class ModelRepository constructor(
 
             }
             return (sessionList)
-
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
+        }
     }
     suspend fun getMessage(userid: String):MoodleQrMessage
     {
+        try {
             appData.verifyData()
             val res = attRepo.getMessageMoodle(userid)
 
@@ -312,38 +372,65 @@ class ModelRepository constructor(
                 fullMessage = res.getString("fullmessage"),
                 timeCreated = res.getInt("timecreated")
             )
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
+        }
     }
     suspend fun getPlainMessage(userid: String):MoodleMessage
     {
-        appData.verifyData()
-        val res = attRepo.getMessageMoodle(userid)
+        try {
+            appData.verifyData()
+            val res = attRepo.getMessageMoodle(userid)
 
-        return MoodleMessage(
-            msgId = res.getString("id"),
-            userIdFrom = res.getString("useridfrom"),
-            userIdTo = res.getString("useridto"),
-            fullMessage = res.getString("fullmessage"),
-            timeCreated = res.getInt("timecreated")
-        )
+            return MoodleMessage(
+                msgId = res.getString("id"),
+                userIdFrom = res.getString("useridfrom"),
+                userIdTo = res.getString("useridto"),
+                fullMessage = res.getString("fullmessage"),
+                timeCreated = res.getInt("timecreated")
+            )
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
+        }
+
     }
     suspend fun sendMessageToStudents(message:QRMessageData, userList:List<MoodleUserInfo>):Boolean{
-        val res = attRepo.sendMessageMoodle(userList.map { it.id },QRMessageData.getQRMessageString(message))
-        Log.i(TAG, "sendMessageToStudents: ${res.toString(4)}")
-        //val resObject = res.getJSONObject(0)
-        //val errorMessage = resObject.getString("errormessage")
-        return true
+        try {
+            val res = attRepo.sendMessageMoodle(userList.map { it.id },QRMessageData.getQRMessageString(message))
+            Log.i(TAG, "sendMessageToStudents: ${res.toString(4)}")
+            //val resObject = res.getJSONObject(0)
+            //val errorMessage = resObject.getString("errormessage")
+            return true
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
+        }
+
     }
     suspend fun sendToStopAttToStudents( userList:List<MoodleUserInfo>):Boolean{
-        val res = attRepo.sendMessageMoodle(userList.map { it.id },QRMessageData.getStopAttString())
-        Log.i(TAG, "sendToStopAttToStudents: ${res.toString(4)}")
-        //val resObject = res.getJSONObject(0)
-        //val errorMessage = resObject.getString("errormessage")
-        return true
+        try {
+            val res = attRepo.sendMessageMoodle(userList.map { it.id },QRMessageData.getStopAttString())
+            Log.i(TAG, "sendToStopAttToStudents: ${res.toString(4)}")
+            //val resObject = res.getJSONObject(0)
+            //val errorMessage = resObject.getString("errormessage")
+            return true
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
+        }
+
     }
     suspend fun getSessionInfo(session_id:String,
                        course: MoodleCourse,
                        attendance: MoodleAttendance,
                        group: MoodleGroup):MoodleSession{
+        try {
             val result = attRepo.getSessionMoodle(session_id)
             val groupId = result.getInt("groupid")
             if (groupId == group.groupid.toInt()) {
@@ -398,14 +485,27 @@ class ModelRepository constructor(
             else{
                 throw Exception("Error: getSessionInfo Group ID not match")
             }
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
+        }
+
     }
 
     fun getAttendance(course: MoodleCourse):MoodleAttendance {
-        val it = courseAttMap
-        val courseAttendance = it.getJSONObject(course.id)
-        val attendanceName = courseAttendance.getString("name")
-        val attendanceId = courseAttendance.getString("id")
-        return MoodleAttendance(course, attendanceId, attendanceName)
+        try {
+            val it = courseAttMap
+            val courseAttendance = it.getJSONObject(course.id)
+            val attendanceName = courseAttendance.getString("name")
+            val attendanceId = courseAttendance.getString("id")
+            return MoodleAttendance(course, attendanceId, attendanceName)
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
+        }
+
     }
 
     /**
@@ -415,66 +515,99 @@ class ModelRepository constructor(
         return QRMessageData.getQRMessageString(data)
     }
     private fun verifyStudent(data:QRMessageData):Boolean{
-        appData.verifyData()
-        val current = Utility().getCurrenMillis()/1000
-        if(data.sessionStartDate <= current  && data.sessionEndDate >= current){
-            if(data.attendanceStartDate <= current && data.attendanceEndDate >= current){
-                return true
+        try {
+            appData.verifyData()
+            val current = Utility().getCurrenMillis()/1000
+            if(data.sessionStartDate <= current  && data.sessionEndDate >= current){
+                if(data.attendanceStartDate <= current && data.attendanceEndDate >= current){
+                    return true
+                }
             }
+            return false
         }
-        return false
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
+        }
+
     }
     suspend fun takePresentAttendance(scannedQRStringResponse:String, student_user_id: String):Boolean {
-        appData.verifyData()
-        val message = getPlainMessage(student_user_id)
-        if(QRMessageData.isStopMessage(message.fullMessage))
-            throw Exception("Session Time has been expired for Attendance.")
-        val it = QRMessageData.getQRMessageObject(scannedQRStringResponse)
-            ?: throw Exception("Invalid Scanned Data")
-        /*if(it.session.isStudentPresentInSession(student_user_id))
-            throw Exception("Student has same attendance as requested.")*/
+        try {
+            appData.verifyData()
+            val message = getPlainMessage(student_user_id)
+            if(QRMessageData.isStopMessage(message.fullMessage))
+                throw Exception("Session Time has been expired for Attendance.")
+            val it = QRMessageData.getQRMessageObject(scannedQRStringResponse)
+            /*if(it.session.isStudentPresentInSession(student_user_id))
+                throw Exception("Student has same attendance as requested.")*/
 
-        val status = it.getPresentStatusId()
-        val stud = ArrayList<String>()
-        stud.add(student_user_id)
-        val res = attRepo.getUserByFieldMoodle("id",stud)
-        Log.i(TAG,"Session id:${it.sessionId},User id:${student_user_id},FacultyId:${it.attendanceByFacultyId},status_id:${status.id},status_name:${status.name}")
-        Log.i(TAG,"User info: $res")
-        if (verifyStudent(it)) {
-            val result = attRepo.takeAttendanceMoodle(
-                session_id = it.sessionId,
-                student_id = student_user_id,
-                taken_by_id = it.attendanceByFacultyId, status_id = status.id, status_set = status.name)
-            return (result)
-        } else {
+            val status = it.getPresentStatusId()
+            val stud = ArrayList<String>()
+            stud.add(student_user_id)
+            val res = attRepo.getUserByFieldMoodle("id",stud)
+            Log.i(TAG,"Session id:${it.sessionId},User id:${student_user_id},FacultyId:${it.attendanceByFacultyId},status_id:${status.id},status_name:${status.name}")
+            Log.i(TAG,"User info: $res")
+            if (verifyStudent(it)) {
+                val result = attRepo.takeAttendanceMoodle(
+                    session_id = it.sessionId,
+                    student_id = student_user_id,
+                    taken_by_id = it.attendanceByFacultyId, status_id = status.id, status_set = status.name)
+                return (result)
+            } else {
 
-            throw Exception("Session Time has been expired for Attendance.")
+                throw Exception("Session Time has been expired for Attendance.")
+            }
         }
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
+        }
+
     }
     suspend fun takePresentAttendance(session:MoodleSession,
                                       faculty_info:MoodleUserInfo,
                                       student_user_id: String,isStudentPresent: Boolean):Boolean {
-        appData.verifyData()
-        /*if(session.isStudentPresentInSession(student_user_id) == isStudentPresent)
-            throw Exception("Student has same attendance as requested.")*/
-        val status = if(isStudentPresent) session.getPresentStatusId() else session.getAbsentStatusId()
+        try {
+            appData.verifyData()
+            /*if(session.isStudentPresentInSession(student_user_id) == isStudentPresent)
+                throw Exception("Student has same attendance as requested.")*/
+            val status = if(isStudentPresent) session.getPresentStatusId() else session.getAbsentStatusId()
             val result = attRepo.takeAttendanceMoodle(
                 session_id = session.sessionId,
                 student_id = student_user_id,
                 taken_by_id = faculty_info.id, status_id = status.id, status_set = status.name)
             return (result)
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
+        }
+
     }
     suspend fun createAttendance(course:MoodleCourse,attendanceName:String):MoodleAttendance{
+        try {
             val result = attRepo.createAttendanceMoodle(course.id,attendanceName)
             return (MoodleAttendance(course, result.getJSONObject(0).getString("id"),attendanceName))
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
+        }
     }
     suspend fun login(recievedMoodleUsername:String, recievedmoodlePassword:String):Boolean {
-        appData.verifyData()
-        val list = getFacultyListByCohort()
-        if(list.find { it.username == recievedMoodleUsername } == null)
-            return false
-        val result = attRepo.login(recievedMoodleUsername, recievedmoodlePassword)
-        return (result)
+        try {
+            appData.verifyData()
+            val list = getFacultyListByCohort()
+            if(list.find { it.username == recievedMoodleUsername } == null)
+                return false
+            val result = attRepo.login(recievedMoodleUsername, recievedmoodlePassword)
+            return (result)
+        }
+        catch (ex:java.lang.Exception)
+        {
+            throw java.lang.Exception(ex.message)
+        }
+
     }
     fun getURLtoBitmap(imageUrl:String): Bitmap?
     {
@@ -496,7 +629,7 @@ class ModelRepository constructor(
     fun convertUrlToBase64(url: String): String {
         val newurl: URL
         val bitmap: Bitmap
-        var base64: String = ""
+        var base64 = ""
         try {
             val policy = StrictMode.ThreadPolicy.Builder().permitAll().build()
             StrictMode.setThreadPolicy(policy)
